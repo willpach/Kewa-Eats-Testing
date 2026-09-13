@@ -11,12 +11,12 @@
   :root{
     --bg:#F7F4E9;
     --card:#FFFDF8;
-    --ink:#2B2A1F;
-    --ink-soft:#69664F;
-    --clay:#BB3E2E;
-    --clay-soft:#F0D9D2;
-    --turquoise:#4C7A44;
-    --ochre:#DFA83B;
+    --ink:#22221C;
+    --ink-soft:#666352;
+    --clay:#A93226;
+    --clay-soft:#EAD3CE;
+    --turquoise:#1E5C52;
+    --ochre:#D9A233;
     --line:#E2DEC7;
     --radius:10px;
   }
@@ -38,7 +38,7 @@
     flex-direction:column;
     align-items:flex-start;
     gap:8px;
-    border-bottom:2px solid var(--ink);
+    border-bottom:3px solid var(--turquoise);
     padding-bottom:18px;
     margin-bottom:24px;
   }
@@ -163,6 +163,21 @@
     display:flex;
     align-items:center;
     justify-content:center;
+  }
+  .feast-mark{
+    font-size:0.7rem;
+    color:var(--ochre);
+    line-height:1;
+  }
+  .feast-banner{
+    background:#FBF1DA;
+    border:1.5px solid var(--ochre);
+    border-radius:var(--radius);
+    padding:10px 14px;
+    margin-bottom:14px;
+    font-size:0.88rem;
+    color:#7A5A16;
+    font-weight:600;
   }
 
   /* WEEK VIEW */
@@ -346,6 +361,37 @@ const FALLBACK_SALES = [
 ];
 
 let SALES = [];
+
+/* ---------- FEAST DAYS ---------- */
+/* New Mexico Pueblo feast days. Month/day repeat every year regardless
+   of which year is being viewed. */
+const FEAST_DAYS = [
+  { month:1,  day:23, name:"Pueblo de San Ildefonso" },
+  { month:3,  day:19, name:"Pueblo of Laguna" },
+  { month:5,  day:1,  name:"Pueblo of San Felipe" },
+  { month:6,  day:13, name:"Pueblo of Sandia" },
+  { month:6,  day:24, name:"Ohkay Owingeh" },
+  { month:7,  day:14, name:"Pueblo de Cochiti" },
+  { month:7,  day:26, name:"Pueblo of Santa Ana" },
+  { month:8,  day:2,  name:"Pueblo of Jemez" },
+  { month:8,  day:4,  name:"Santo Domingo Pueblo" },
+  { month:8,  day:10, name:"Picuris Pueblo" },
+  { month:8,  day:12, name:"Santa Clara Pueblo" },
+  { month:8,  day:15, name:"Pueblo of Zia" },
+  { month:8,  day:28, name:"Pueblo of Isleta" },
+  { month:9,  day:2,  name:"Pueblo of Acoma" },
+  { month:9,  day:19, name:"Pueblo of Laguna" },
+  { month:9,  day:30, name:"Taos Pueblo" },
+  { month:10, day:4,  name:"Nambé Pueblo" },
+  { month:11, day:12, name:"Pueblo of Jemez" },
+  { month:11, day:12, name:"Pueblo of Tesuque" },
+  { month:12, day:12, name:"Pueblo of Pojoaque" }
+];
+
+function feastsForDate(dateObj){
+  const m = dateObj.getMonth()+1, d = dateObj.getDate();
+  return FEAST_DAYS.filter(f => f.month===m && f.day===d);
+}
 
 function parseFormDate(raw){
   // Google Forms date question submits as M/D/YYYY
@@ -573,9 +619,12 @@ function renderMonth(){
     const key = fmtKey(dateObj);
     const isToday = key === fmtKey(today);
     const count = (salesByDate[key]||[]).length;
+    const feasts = feastsForDate(dateObj);
+    const feastTitle = feasts.map(f=>f.name).join(', ');
     grid.innerHTML += `
-      <div class="day-cell${isToday?' today':''}" data-date="${key}">
+      <div class="day-cell${isToday?' today':''}" data-date="${key}" ${feasts.length?`title="Feast day: ${feastTitle}"`:''}>
         <span class="day-num">${d}</span>
+        ${feasts.length ? `<span class="feast-mark">★</span>` : ''}
         ${count ? `<span class="badge">${count}</span>` : ''}
       </div>`;
   }
@@ -634,12 +683,17 @@ function renderDay(){
   $('#periodLabel').textContent = `${dowShort[selectedDay.getDay()]}, ${monthNames[selectedDay.getMonth()]} ${selectedDay.getDate()}${isToday ? ' · Today' : ''}`;
 
   const daySales = salesByDate[key] || [];
+  const feasts = feastsForDate(selectedDay);
   const container = $('#dayListings');
+  const feastBanner = feasts.length
+    ? `<div class="feast-banner">★ Feast day: ${feasts.map(f=>f.name).join(', ')}</div>`
+    : '';
+
   if(!daySales.length){
-    container.innerHTML = `<div class="empty-state">No food sales posted for this day yet.</div>`;
+    container.innerHTML = `${feastBanner}<div class="empty-state">No food sales posted for this day yet.</div>`;
     return;
   }
-  container.innerHTML = daySales.map(s=>vendorCard(s,false)).join('');
+  container.innerHTML = feastBanner + daySales.map(s=>vendorCard(s,false)).join('');
   attachCardToggles(container);
 }
 
