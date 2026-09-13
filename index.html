@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
   :root{
     --bg:#FAF6EE;
@@ -299,121 +300,103 @@
   <div class="view" id="view-day">
     <div class="listings" id="dayListings"></div>
   </div>
+
+  <p id="statusNote" style="margin-top:28px;font-size:0.8rem;color:var(--ink-soft);"></p>
 </div>
 
 <script>
-/* ---------- DUMMY DATA (stand-in for Google Sheet rows) ---------- */
-/* Each row mirrors a real form submission. Swap SALES with data
-   fetched/parsed from the published Google Sheet CSV later. */
+/* ---------- LIVE DATA SOURCE ---------- */
+/* Published Google Sheet (CSV). Replace this URL with your own
+   Form's "Publish to web" CSV link if it ever changes. */
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1QILYiDDMPvmwjFNLCsFhy5nlqVCBXX8pP0C8hvnBaCJp86C5CUH6iAIRd7l7cpggH-TPdBEiB_Uu/pub?gid=1350305170&single=true&output=csv";
 
-const SALES = [
+// Fallback sample data, used only if the live fetch fails (e.g. offline preview)
+// TEMP: using your real BobaStuff test submission here to verify parsing logic
+const FALLBACK_SALES = [
   {
-    vendor: "Anacita's Kitchen",
-    items: ["Posole w/frybread $10", "Indian tacos $8", "Frito pie $6", "Frybread burgers $10", "Burgers $6", "Cheese fries $6", "Red chili cheese fries $7"],
-    date: "2026-09-10",
-    time: "11:30am, order ahead by text",
+    vendor: "BobaStuff",
+    items: ["Milk Tea Boba $5", "Plain Tea $5", "Fruit Tea $6", "Frybread $10"],
+    date: "2026-09-26",
+    time: "7am to 11am",
     fulfillment: "pickup",
-    location: "104 Kingman Street",
-    payment: "Exact cash, CashApp $Chavez0008, FB Pay (Anacita Bailon), credit/debit cards",
+    location: "Community Center",
+    payment: "Cash, tap to pay",
     contactPublic: true,
-    contact: "Text or call (505) 948-1834"
-  },
-  {
-    vendor: "Ohana Refreshments",
-    items: ["Hamburger combo w/ fries + drink $10", "Cheeseburger combo w/ fries + drink $10", "24oz Lemonade $5", "Dirty Soda 24oz $7", "Mango Chai Tea $7"],
-    date: "2026-09-10",
-    time: "11:30am, while supplies last",
-    fulfillment: "pickup",
-    location: "111 Ysleta Del Sur Street (Harvey & Jaine Chavez residence)",
-    payment: "Cash, CashApp $RaelynAmber23",
-    contactPublic: true,
-    contact: "Call or text (505) 231-7653 or (505) 933-0645"
-  },
-  {
-    vendor: "Aguilar Shave Ice",
-    items: ["Shave ice, mixed flavors $4"],
-    date: "2026-09-11",
-    time: "Open til sundown",
-    fulfillment: "pickup",
-    location: "North of the community center",
-    payment: "Cash",
-    contactPublic: false,
-    contact: ""
-  },
-  {
-    vendor: "Sno Cups & Picadillys",
-    items: ["Sno cup $1 / $3 / $4 (by size)", "Picadillys $5"],
-    date: "2026-09-11",
-    time: "Closing at sundown",
-    fulfillment: "pickup",
-    location: "See OPEN sign on door",
-    payment: "Cash",
-    contactPublic: false,
-    contact: ""
-  },
-  {
-    vendor: "TrahpehKewa Burritos",
-    items: ["Carne burritos $8", "Green chili burritos $8", "Potato, ground beef & green chili burritos", "Dessert $4"],
-    date: "2026-09-12",
-    time: "Morning, then heading up to Santa Fe",
-    fulfillment: "delivery",
-    location: "Delivering around Kewa, then Santa Fe",
-    payment: "Cash",
-    contactPublic: true,
-    contact: "Message before heading up"
-  },
-  {
-    vendor: "Nambe St. Sweets",
-    items: ["SPAM burritos", "Popcorn ball", "Rice crispy treat"],
-    date: "2026-09-12",
-    time: "Morning — leaving for the parade at 6:45am",
-    fulfillment: "pickup",
-    location: "Nambe St, House #128",
-    payment: "Cash",
-    contactPublic: false,
-    contact: ""
-  },
-  {
-    vendor: "132 Tano Sweets",
-    items: ["Stuffed sopas $6", "Caramel apples, plain $5", "Caramel apples w/ pecans $6"],
-    date: "2026-09-13",
-    time: "12pm–4pm",
-    fulfillment: "pickup",
-    location: "132 Tano Street",
-    payment: "Cash, Apple Pay & Zelle (no fee), CashApp & cards (small fee)",
-    contactPublic: false,
-    contact: ""
-  },
-  {
-    vendor: "Anacita's Kitchen",
-    items: ["Frito pie $6", "Cheeseburgers $7", "Fries $5"],
-    date: "2026-09-17",
-    time: "11am–2pm",
-    fulfillment: "both",
-    location: "104 Kingman Street, or delivery within village",
-    payment: "Cash, CashApp $Chavez0008",
-    contactPublic: true,
-    contact: "Text or call (505) 948-1834"
-  },
-  {
-    vendor: "Ohana Refreshments",
-    items: ["Dirty Energy Drink 24oz $8", "Berry Cheesecake Burst $7", "Mango Dragon Fruit Refresher $7"],
-    date: "2026-09-19",
-    time: "12pm, til we run out!",
-    fulfillment: "pickup",
-    location: "111 Ysleta Del Sur Street",
-    payment: "Cash, CashApp $RaelynAmber23",
-    contactPublic: true,
-    contact: "Call or text (505) 231-7653"
+    contact: "text: 555-555-5555"
   }
 ];
+
+let SALES = [];
+
+function parseFormDate(raw){
+  // Google Forms date question submits as M/D/YYYY
+  const parts = raw.trim().split('/');
+  if(parts.length !== 3) return null;
+  const [m,d,y] = parts.map(n=>parseInt(n,10));
+  return `${y}-${pad(m)}-${pad(d)}`;
+}
+
+function fulfillmentFromAnswer(raw){
+  const v = (raw||'').toLowerCase();
+  if(v.includes('pick') && v.includes('deliver')) return 'both';
+  if(v.includes('deliver')) return 'delivery';
+  return 'pickup';
+}
+
+function rowToSale(row){
+  const dateKey = parseFormDate(row['When is your food sale?'] || '');
+  if(!dateKey) return null; // skip malformed/incomplete rows
+  const itemsRaw = row['List each item and its price, one per line '] || row['List each item and its price, one per line'] || '';
+  const items = itemsRaw.split('\n').map(s=>s.trim()).filter(Boolean);
+  const contactAnswer = (row['Can we post your contact info on the site?'] || '').trim().toLowerCase();
+
+  return {
+    vendor: (row['Vendor/Business Name']||'Unnamed vendor').trim(),
+    items: items.length ? items : ['Menu not listed'],
+    date: dateKey,
+    time: (row['What time is your food sale?']||'').trim(),
+    fulfillment: fulfillmentFromAnswer(row['Pickup or delivery?']),
+    location: (row['Address for Pickup and Instructions']||'').trim(),
+    payment: (row['Payment Options']||'').trim(),
+    contactPublic: contactAnswer.startsWith('yes'),
+    contact: (row['Contact info and preferences']||'').trim()
+  };
+}
+
+function loadData(){
+  Papa.parse(CSV_URL, {
+    download: true,
+    header: true,
+    skipEmptyLines: true,
+    complete: function(results){
+      const parsed = results.data.map(rowToSale).filter(Boolean);
+      SALES = parsed.length ? parsed : FALLBACK_SALES;
+      rebuildIndexAndRender('live');
+    },
+    error: function(){
+      SALES = FALLBACK_SALES;
+      rebuildIndexAndRender('offline');
+    }
+  });
+}
 
 /* ---------- helpers ---------- */
 const $ = sel => document.querySelector(sel);
 const pad = n => String(n).padStart(2,'0');
 const fmtKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-const salesByDate = {};
-SALES.forEach(s => { (salesByDate[s.date] = salesByDate[s.date] || []).push(s); });
+let salesByDate = {};
+
+function rebuildIndexAndRender(status){
+  salesByDate = {};
+  SALES.forEach(s => { (salesByDate[s.date] = salesByDate[s.date] || []).push(s); });
+  const note = $('#statusNote');
+  if(status === 'live'){
+    note.textContent = `Loaded ${SALES.length} posting${SALES.length===1?'':'s'} from the live form responses.`;
+  } else {
+    note.textContent = `Couldn't reach the live sheet — showing sample data instead.`;
+  }
+  render();
+}
 
 const today = new Date();
 today.setHours(0,0,0,0);
@@ -595,7 +578,8 @@ $('#todayBtn').addEventListener('click', ()=>{
   render();
 });
 
-render();
+$('#statusNote').textContent = 'Loading current listings…';
+loadData();
 </script>
 </body>
 </html>
