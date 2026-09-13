@@ -9,15 +9,15 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
   :root{
-    --bg:#FAF6EE;
+    --bg:#F7F4E9;
     --card:#FFFDF8;
-    --ink:#2B221B;
-    --ink-soft:#6B5D4F;
-    --clay:#B54A34;
-    --clay-soft:#E9C9BF;
-    --turquoise:#3D7A74;
-    --ochre:#D6A23C;
-    --line:#E4DAC8;
+    --ink:#2B2A1F;
+    --ink-soft:#69664F;
+    --clay:#BB3E2E;
+    --clay-soft:#F0D9D2;
+    --turquoise:#4C7A44;
+    --ochre:#DFA83B;
+    --line:#E2DEC7;
     --radius:10px;
   }
   *{box-sizing:border-box;}
@@ -35,9 +35,8 @@
   }
   header{
     display:flex;
-    align-items:baseline;
-    justify-content:space-between;
-    flex-wrap:wrap;
+    flex-direction:column;
+    align-items:flex-start;
     gap:8px;
     border-bottom:2px solid var(--ink);
     padding-bottom:18px;
@@ -55,8 +54,7 @@
     font-size:0.95rem;
     color:var(--ink-soft);
     margin:0;
-    max-width:280px;
-    text-align:right;
+    max-width:340px;
   }
   nav.views{
     display:flex;
@@ -121,7 +119,7 @@
   /* MONTH VIEW */
   .month-grid{
     display:grid;
-    grid-template-columns:repeat(7,1fr);
+    grid-template-columns:repeat(7,minmax(0,1fr));
     gap:6px;
   }
   .dow{
@@ -130,32 +128,41 @@
     color:var(--ink-soft);
     text-align:left;
     padding:4px 6px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
   }
   .day-cell{
     background:var(--card);
     border:1.5px solid var(--line);
     border-radius:var(--radius);
-    min-height:78px;
-    padding:8px;
+    min-height:64px;
+    padding:6px;
     cursor:pointer;
     display:flex;
     flex-direction:column;
-    gap:6px;
+    justify-content:space-between;
+    overflow:hidden;
     transition:border-color .15s ease;
   }
   .day-cell:hover{border-color:var(--clay);}
   .day-cell.empty{background:transparent;border-color:transparent;cursor:default;}
   .day-cell.today{border-color:var(--turquoise);border-width:2px;}
-  .day-num{font-size:0.85rem;font-weight:600;color:var(--ink-soft);}
+  .day-num{font-size:0.8rem;font-weight:600;color:var(--ink-soft);}
   .day-cell.today .day-num{color:var(--turquoise);}
   .badge{
-    align-self:flex-start;
-    background:var(--clay-soft);
-    color:var(--clay);
+    align-self:flex-end;
+    width:22px;
+    height:22px;
+    flex-shrink:0;
+    background:var(--clay);
+    color:#fff;
     font-size:0.72rem;
     font-weight:700;
-    padding:2px 8px;
-    border-radius:999px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
   }
 
   /* WEEK VIEW */
@@ -271,7 +278,13 @@
 <div class="wrap">
   <header>
     <h1>Kewa <span>Eats</span></h1>
-    <p class="tagline">See who's selling food this week — click a day to browse.</p>
+    <div style="text-align:left;">
+      <p class="tagline">What's there to eat?! Click a day to see!</p>
+      <a href="https://docs.google.com/forms/d/e/1FAIpQLScSIS5omgi5sJJmq8Kj_ojDXfQXCbb_WqK2DO1wBHWVuCFTlQ/viewform" target="_blank" rel="noopener"
+         style="display:inline-block;margin-top:6px;font-size:0.85rem;font-weight:700;color:#fff;background:var(--clay);padding:7px 16px;border-radius:999px;text-decoration:none;">
+        Post your food sale →
+      </a>
+    </div>
   </header>
 
   <nav class="views">
@@ -279,6 +292,8 @@
     <button data-view="week">Week</button>
     <button data-view="day">Day</button>
   </nav>
+
+  <div id="filterBar" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;"></div>
 
   <div class="nav-row">
     <div class="period" id="periodLabel"></div>
@@ -302,6 +317,9 @@
   </div>
 
   <p id="statusNote" style="margin-top:28px;font-size:0.8rem;color:var(--ink-soft);"></p>
+  <p style="font-size:0.8rem;color:var(--ink-soft);margin-top:6px;">
+    Questions or issues? Email <a href="mailto:KewaEats@gmail.com" style="color:var(--clay);font-weight:600;">KewaEats@gmail.com</a>
+  </p>
 </div>
 
 <script>
@@ -322,7 +340,8 @@ const FALLBACK_SALES = [
     location: "Community Center",
     payment: "Cash, tap to pay",
     contactPublic: true,
-    contact: "text: 555-555-5555"
+    contact: "text: 555-555-5555",
+    categories: ["Drinks", "Frybread"]
   }
 ];
 
@@ -338,28 +357,49 @@ function parseFormDate(raw){
 
 function fulfillmentFromAnswer(raw){
   const v = (raw||'').toLowerCase();
-  if(v.includes('pick') && v.includes('deliver')) return 'both';
+  if(v.includes('both') || (v.includes('pick') && v.includes('deliver'))) return 'both';
   if(v.includes('deliver')) return 'delivery';
   return 'pickup';
+}
+
+// Treats blank/"no"/"n/a"/"none" style answers on optional fields as empty,
+// so a vendor typing "No" instead of leaving it blank doesn't clutter the card.
+function meaningfulText(raw){
+  const v = (raw||'').trim();
+  if(!v) return '';
+  const flat = v.toLowerCase().replace(/[.\s]/g,'');
+  if(flat === 'no' || flat === 'na' || flat === 'none') return '';
+  return v;
 }
 
 function rowToSale(row){
   const dateKey = parseFormDate(row['When is your food sale?'] || '');
   if(!dateKey) return null; // skip malformed/incomplete rows
-  const itemsRaw = row['List each item and its price, one per line '] || row['List each item and its price, one per line'] || '';
+  const itemsRaw = row['What is your menu?'] || '';
   const items = itemsRaw.split('\n').map(s=>s.trim()).filter(Boolean);
   const contactAnswer = (row['Can we post your contact info on the site?'] || '').trim().toLowerCase();
+  const recurring = meaningfulText(row['Is this a recurring sale? (optional)'] || '');
+  const categoriesRaw = row['Categories (check all that apply)'] || '';
+  const allCategories = categoriesRaw.split(',').map(c=>c.trim()).filter(Boolean);
+  const isPreorder = allCategories.some(c => c.toLowerCase() === 'pre-order' || c.toLowerCase() === 'preorder');
+  const categories = allCategories.filter(c => c.toLowerCase() !== 'pre-order' && c.toLowerCase() !== 'preorder');
+  // Optional free-text deadline detail, if that question exists on the form
+  const preorder = (row['Taking pre-orders? (optional)'] || '').trim();
 
   return {
     vendor: (row['Vendor/Business Name']||'Unnamed vendor').trim(),
     items: items.length ? items : ['Menu not listed'],
     date: dateKey,
     time: (row['What time is your food sale?']||'').trim(),
-    fulfillment: fulfillmentFromAnswer(row['Pickup or delivery?']),
-    location: (row['Address for Pickup and Instructions']||'').trim(),
+    fulfillment: fulfillmentFromAnswer(row['Pickup only, delivery only, or both?']),
+    location: (row['Where will you be located?']||'').trim(),
     payment: (row['Payment Options']||'').trim(),
     contactPublic: contactAnswer.startsWith('yes'),
-    contact: (row['Contact info and preferences']||'').trim()
+    contact: (row['Contact info and preferences']||'').trim(),
+    recurring: recurring,
+    categories: categories,
+    preorder: preorder,
+    isPreorder: isPreorder
   };
 }
 
@@ -385,17 +425,54 @@ const $ = sel => document.querySelector(sel);
 const pad = n => String(n).padStart(2,'0');
 const fmtKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 let salesByDate = {};
+let activeFilters = new Set();
+
+function getFilteredSales(){
+  if(activeFilters.size === 0) return SALES;
+  return SALES.filter(s => s.categories.some(c => activeFilters.has(c)));
+}
+
+function renderFilterBar(){
+  const allCats = new Set();
+  SALES.forEach(s => s.categories.forEach(c => allCats.add(c)));
+  const bar = $('#filterBar');
+  if(allCats.size === 0){ bar.innerHTML = ''; return; }
+
+  const chips = Array.from(allCats).sort().map(cat => {
+    const active = activeFilters.has(cat);
+    return `<button class="filter-chip${active?' active':''}" data-cat="${cat}"
+      style="font-size:0.8rem;font-weight:600;padding:6px 14px;border-radius:999px;
+      border:1.5px solid ${active?'var(--turquoise)':'var(--line)'};
+      background:${active?'var(--turquoise)':'var(--card)'};
+      color:${active?'#fff':'var(--ink-soft)'};cursor:pointer;">${cat}</button>`;
+  }).join('');
+
+  bar.innerHTML = chips;
+  bar.querySelectorAll('.filter-chip').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const cat = btn.dataset.cat;
+      if(activeFilters.has(cat)) activeFilters.delete(cat);
+      else activeFilters.add(cat);
+      reindexAndRender();
+    });
+  });
+}
+
+function reindexAndRender(){
+  salesByDate = {};
+  getFilteredSales().forEach(s => { (salesByDate[s.date] = salesByDate[s.date] || []).push(s); });
+  renderFilterBar();
+  render();
+}
 
 function rebuildIndexAndRender(status){
-  salesByDate = {};
-  SALES.forEach(s => { (salesByDate[s.date] = salesByDate[s.date] || []).push(s); });
   const note = $('#statusNote');
   if(status === 'live'){
     note.textContent = `Loaded ${SALES.length} posting${SALES.length===1?'':'s'} from the live form responses.`;
   } else {
     note.textContent = `Couldn't reach the live sheet — showing sample data instead.`;
   }
-  render();
+  reindexAndRender();
 }
 
 const today = new Date();
@@ -426,22 +503,46 @@ function vendorCard(sale, forceOpen){
     ? `<div class="detail-row"><span class="detail-label">Contact</span>${sale.contact}</div>`
     : `<div class="detail-row"><span class="detail-label">Contact</span><span class="contact-note">Kept private by vendor — check back or look for their posted flyer.</span></div>`;
 
+  const recurringBlock = sale.recurring
+    ? `<div class="detail-row"><span class="detail-label">Recurring</span>${sale.recurring}</div>`
+    : '';
+
+  const preorderBlock = sale.preorder
+    ? `<div class="detail-row"><span class="detail-label">Pre-orders</span>${sale.preorder}</div>`
+    : (sale.isPreorder ? `<div class="detail-row"><span class="detail-label">Pre-orders</span>Contact vendor for order details and deadline.</div>` : '');
+
+  const preorderBadge = (sale.isPreorder || sale.preorder)
+    ? `<span class="chip" style="background:#F5E7C4;color:#8A6A1E;">Pre-order</span>`
+    : '';
+
+  const catTags = (sale.categories && sale.categories.length)
+    ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;">${sale.categories.map(c=>
+        `<span style="font-size:0.7rem;font-weight:600;color:var(--turquoise);background:#EAF1E8;padding:2px 9px;border-radius:999px;">${c}</span>`
+      ).join('')}</div>`
+    : '';
+
   return `
     <div class="vendor-card${forceOpen ? ' open' : ''}">
       <div class="vendor-card-top">
         <div>
           <p class="vendor-name">${sale.vendor}</p>
           <p class="vendor-sub"><b>${sale.time}</b></p>
+          ${catTags}
         </div>
-        ${fulfillmentChip(sale.fulfillment)}
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+          ${fulfillmentChip(sale.fulfillment)}
+          ${preorderBadge}
+        </div>
       </div>
       <div class="vendor-details">
         <div class="detail-row">
           <span class="detail-label">Menu</span>
           <ul class="menu-list">${menu}</ul>
         </div>
-        <div class="detail-row"><span class="detail-label">Location</span>${sale.location}</div>
+        <div class="detail-row"><span class="detail-label">Location & Instructions</span>${sale.location}</div>
         <div class="detail-row"><span class="detail-label">Payment</span>${sale.payment}</div>
+        ${recurringBlock}
+        ${preorderBlock}
         ${contactBlock}
       </div>
     </div>`;
@@ -474,7 +575,7 @@ function renderMonth(){
     grid.innerHTML += `
       <div class="day-cell${isToday?' today':''}" data-date="${key}">
         <span class="day-num">${d}</span>
-        ${count ? `<span class="badge">${count} selling</span>` : ''}
+        ${count ? `<span class="badge">${count}</span>` : ''}
       </div>`;
   }
 
