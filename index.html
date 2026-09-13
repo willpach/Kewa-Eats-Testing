@@ -306,15 +306,18 @@
     </div>
   </header>
 
+  <p style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft);margin:0 0 6px;">Views</p>
   <nav class="views">
     <button data-view="month" class="active">Month</button>
     <button data-view="week">Week</button>
     <button data-view="day">Day</button>
+    <button data-view="list">List</button>
   </nav>
 
+  <p id="filterLabel" style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft);margin:18px 0 6px;">Craving something specific?</p>
   <div id="filterBar" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;"></div>
 
-  <div class="nav-row">
+  <div class="nav-row" id="navRow">
     <div class="period" id="periodLabel"></div>
     <div class="controls">
       <button class="step" id="prevBtn">‹</button>
@@ -333,6 +336,10 @@
 
   <div class="view" id="view-day">
     <div class="listings" id="dayListings"></div>
+  </div>
+
+  <div class="view" id="view-list">
+    <div class="listings" id="listListings"></div>
   </div>
 
   <p id="statusNote" style="margin-top:28px;font-size:0.8rem;color:var(--ink-soft);"></p>
@@ -486,7 +493,9 @@ function renderFilterBar(){
   const allCats = new Set();
   SALES.forEach(s => s.categories.forEach(c => allCats.add(c)));
   const bar = $('#filterBar');
-  if(allCats.size === 0){ bar.innerHTML = ''; return; }
+  const label = $('#filterLabel');
+  if(allCats.size === 0){ bar.innerHTML = ''; label.style.display = 'none'; return; }
+  label.style.display = 'block';
 
   const chips = Array.from(allCats).sort().map(cat => {
     const active = activeFilters.has(cat);
@@ -701,10 +710,43 @@ function renderDay(){
   attachCardToggles(container);
 }
 
+function renderList(){
+  const upcomingKeys = Object.keys(salesByDate)
+    .filter(k => k >= fmtKey(today))
+    .sort();
+
+  const container = $('#listListings');
+
+  if(!upcomingKeys.length){
+    container.innerHTML = `<div class="empty-state">No upcoming food sales posted yet.</div>`;
+    return;
+  }
+
+  container.innerHTML = upcomingKeys.map(key => {
+    const dateObj = new Date(key + 'T00:00:00');
+    const isToday = key === fmtKey(today);
+    const feasts = feastsForDate(dateObj);
+    const label = `${dowShort[dateObj.getDay()]}, ${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}${isToday ? ' · Today' : ''}`;
+    const feastBanner = feasts.length
+      ? `<div class="feast-banner" style="margin-top:0;">★ Feast day: ${feasts.map(f=>f.name).join(', ')}</div>`
+      : '';
+    const cards = salesByDate[key].map(s=>vendorCard(s,false)).join('');
+    return `
+      <div style="margin-bottom:22px;">
+        <p style="font-family:'Fraunces',serif;font-weight:600;font-size:1.1rem;margin:0 0 8px;${isToday?`color:var(--turquoise);`:''}">${label}</p>
+        ${feastBanner}
+        <div style="display:flex;flex-direction:column;gap:10px;">${cards}</div>
+      </div>`;
+  }).join('');
+
+  attachCardToggles(container);
+}
+
 function render(){
   if(currentView==='month') renderMonth();
   if(currentView==='week') renderWeek();
   if(currentView==='day') renderDay();
+  if(currentView==='list') renderList();
 }
 
 function setView(v){
@@ -712,6 +754,7 @@ function setView(v){
   document.querySelectorAll('nav.views button').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   $('#view-'+v).classList.add('active');
+  $('#navRow').style.display = (v === 'list') ? 'none' : 'flex';
   render();
 }
 
