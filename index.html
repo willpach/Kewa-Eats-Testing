@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Kewa Eats</title>
+<title>Pueblo Eats</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -296,9 +296,9 @@
 </div>
 <div class="wrap">
   <header>
-    <h1>Kewa <span>Eats</span></h1>
+    <h1>Pueblo <span>Eats</span></h1>
     <div style="text-align:left;">
-      <p class="tagline">Ah tsii-yahm-srt? What's there to eat?! Click a day to see!</p>
+      <p class="tagline">What's there to eat?! Click a day to see!</p>
       <a href="https://docs.google.com/forms/d/e/1FAIpQLScSIS5omgi5sJJmq8Kj_ojDXfQXCbb_WqK2DO1wBHWVuCFTlQ/viewform" target="_blank" rel="noopener"
          style="display:inline-block;margin-top:6px;font-size:0.85rem;font-weight:700;color:#fff;background:var(--clay);padding:7px 16px;border-radius:999px;text-decoration:none;">
         Post your food sale →
@@ -316,6 +316,9 @@
 
   <p id="filterLabel" style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft);margin:18px 0 6px;">Craving something specific?</p>
   <div id="filterBar" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;"></div>
+
+  <p id="villageFilterLabel" style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft);margin:0 0 6px;">Where can you get it?</p>
+  <div id="villageFilterBar" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;"></div>
 
   <div class="nav-row" id="navRow">
     <div class="period" id="periodLabel"></div>
@@ -435,27 +438,48 @@ function rowToSale(row){
   const itemsRaw = row['What is your menu?'] || '';
   const items = itemsRaw.split('\n').map(s=>s.trim()).filter(Boolean);
   const contactAnswer = (row['Can we post your contact info on the site?'] || '').trim().toLowerCase();
-  const recurring = meaningfulText(row['Is this a recurring sale? (optional)'] || '');
   const categoriesRaw = row['Categories (check all that apply)'] || '';
   const allCategories = categoriesRaw.split(',').map(c=>c.trim()).filter(Boolean);
-  const isPreorder = allCategories.some(c => c.toLowerCase() === 'pre-order' || c.toLowerCase() === 'preorder');
+  const preorderCategoryChecked = allCategories.some(c => c.toLowerCase() === 'pre-order' || c.toLowerCase() === 'preorder');
   const categories = allCategories.filter(c => c.toLowerCase() !== 'pre-order' && c.toLowerCase() !== 'preorder');
-  // Optional free-text deadline detail, if that question exists on the form
-  const preorder = (row['Taking pre-orders? (optional)'] || '').trim();
+
+  // Recurring: Yes/No question with a branched follow-up shown only if Yes
+  const recurringAnswer = (row['Is this a recurring food sale?'] || '').trim().toLowerCase();
+  const isRecurring = recurringAnswer.startsWith('yes');
+  const recurringDetails = meaningfulText(row['Tell us when you usually have your food sale:'] || '');
+
+  // Pre-orders: Yes/No question with a branched follow-up shown only if Yes,
+  // OR the "Pre-order" Categories checkbox — either signals pre-order status.
+  const preorderAnswer = (row['Taking pre-orders? (optional)'] || '').trim().toLowerCase();
+  const preorderAnswerYes = preorderAnswer.startsWith('yes');
+  const isPreorder = preorderAnswerYes || preorderCategoryChecked;
+  const preorderDetails = meaningfulText(row['Tell us about your Pre-order requirements:'] || '');
+
+  // General catch-all for misc notes (allergy info, etc). Checks both with
+  // and without a trailing "?" since the form's exact title has varied.
+  const notes = meaningfulText(row['Anything else buyers should know (optional)'] || row['Anything else buyers should know? (optional)'] || '');
+
+  const basedIn = (row['Where are you based?'] || '').trim();
+  const openToRaw = row['Which communities/villages is sale open to?'] || '';
+  const openTo = openToRaw.split(',').map(v=>v.trim()).filter(Boolean);
 
   return {
     vendor: (row['Vendor/Business Name']||'Unnamed vendor').trim(),
+    basedIn: basedIn,
+    openTo: openTo,
     items: items.length ? items : ['Menu not listed'],
     date: dateKey,
     time: (row['What time is your food sale?']||'').trim(),
     fulfillment: fulfillmentFromAnswer(row['Pickup only, delivery only, or both?']),
     location: (row['Where will you be located?']||'').trim(),
-    payment: (row['Payment Options']||'').trim(),
+    payment: (row['How can people pay? (mark all that apply)']||'').trim(),
     contactPublic: contactAnswer.startsWith('yes'),
     contact: (row['Contact info and preferences']||'').trim(),
-    recurring: recurring,
+    notes: notes,
+    isRecurring: isRecurring,
+    recurringDetails: recurringDetails,
+    preorderDetails: preorderDetails,
     categories: categories,
-    preorder: preorder,
     isPreorder: isPreorder
   };
 }
@@ -483,10 +507,14 @@ const pad = n => String(n).padStart(2,'0');
 const fmtKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 let salesByDate = {};
 let activeFilters = new Set();
+let activeVillageFilters = new Set();
 
 function getFilteredSales(){
-  if(activeFilters.size === 0) return SALES;
-  return SALES.filter(s => s.categories.some(c => activeFilters.has(c)));
+  return SALES.filter(s => {
+    const catMatch = activeFilters.size === 0 || s.categories.some(c => activeFilters.has(c));
+    const villageMatch = activeVillageFilters.size === 0 || (s.openTo||[]).some(v => activeVillageFilters.has(v));
+    return catMatch && villageMatch;
+  });
 }
 
 function renderFilterBar(){
@@ -517,10 +545,39 @@ function renderFilterBar(){
   });
 }
 
+function renderVillageFilterBar(){
+  const allVillages = new Set();
+  SALES.forEach(s => (s.openTo||[]).forEach(v => allVillages.add(v)));
+  const bar = $('#villageFilterBar');
+  const label = $('#villageFilterLabel');
+  if(allVillages.size === 0){ bar.innerHTML = ''; label.style.display = 'none'; return; }
+  label.style.display = 'block';
+
+  const chips = Array.from(allVillages).sort().map(v => {
+    const active = activeVillageFilters.has(v);
+    return `<button class="filter-chip" data-village="${v}"
+      style="font-size:0.8rem;font-weight:600;padding:6px 14px;border-radius:999px;
+      border:1.5px solid ${active?'var(--clay)':'var(--line)'};
+      background:${active?'var(--clay)':'var(--card)'};
+      color:${active?'#fff':'var(--ink-soft)'};cursor:pointer;">${v}</button>`;
+  }).join('');
+
+  bar.innerHTML = chips;
+  bar.querySelectorAll('.filter-chip').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const v = btn.dataset.village;
+      if(activeVillageFilters.has(v)) activeVillageFilters.delete(v);
+      else activeVillageFilters.add(v);
+      reindexAndRender();
+    });
+  });
+}
+
 function reindexAndRender(){
   salesByDate = {};
   getFilteredSales().forEach(s => { (salesByDate[s.date] = salesByDate[s.date] || []).push(s); });
   renderFilterBar();
+  renderVillageFilterBar();
   render();
 }
 
@@ -562,16 +619,34 @@ function vendorCard(sale, forceOpen){
     ? `<div class="detail-row"><span class="detail-label">Contact</span>${sale.contact}</div>`
     : `<div class="detail-row"><span class="detail-label">Contact</span><span class="contact-note">Kept private by vendor — check back or look for their posted flyer.</span></div>`;
 
-  const recurringBlock = sale.recurring
-    ? `<div class="detail-row"><span class="detail-label">Recurring</span>${sale.recurring}</div>`
+  const notesBlock = sale.notes
+    ? `<div class="detail-row"><span class="detail-label">Good to know</span>${sale.notes}</div>`
     : '';
 
-  const preorderBlock = sale.preorder
-    ? `<div class="detail-row"><span class="detail-label">Pre-orders</span>${sale.preorder}</div>`
-    : (sale.isPreorder ? `<div class="detail-row"><span class="detail-label">Pre-orders</span>Contact vendor for order details and deadline.</div>` : '');
+  const recurringBlock = sale.isRecurring
+    ? `<div class="detail-row"><span class="detail-label">Recurring</span>${sale.recurringDetails || 'Contact vendor for schedule details.'}</div>`
+    : '';
 
-  const preorderBadge = (sale.isPreorder || sale.preorder)
+  const preorderBlock = sale.isPreorder
+    ? `<div class="detail-row"><span class="detail-label">Pre-order details</span>${sale.preorderDetails || 'Contact vendor for order details and deadline.'}</div>`
+    : '';
+
+  const preorderBadge = sale.isPreorder
     ? `<span class="chip" style="background:#F5E7C4;color:#8A6A1E;">Pre-order</span>`
+    : '';
+
+  const recurringBadge = sale.isRecurring
+    ? `<span class="chip" style="background:#E4EDE9;color:var(--turquoise);">Recurring</span>`
+    : '';
+
+  const basedInLine = sale.basedIn
+    ? `<p class="vendor-sub" style="margin-top:2px;">Based in ${sale.basedIn}</p>`
+    : '';
+
+  const openToTags = (sale.openTo && sale.openTo.length)
+    ? sale.openTo.map(v=>
+        `<span style="font-size:0.7rem;font-weight:700;color:var(--clay);background:var(--clay-soft);padding:2px 9px;border-radius:999px;">${v}</span>`
+      ).join('')
     : '';
 
   const catTags = (sale.categories && sale.categories.length)
@@ -585,13 +660,16 @@ function vendorCard(sale, forceOpen){
       <div class="vendor-card-top">
         <div>
           <p class="vendor-name">${sale.vendor}</p>
+          ${basedInLine}
           <p class="vendor-sub"><b>${sale.time}</b></p>
           <p class="vendor-sub" style="margin-top:2px;">${sale.location}</p>
+          ${openToTags ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;"><span style="font-size:0.7rem;color:var(--ink-soft);align-self:center;">Open to:</span>${openToTags}</div>` : ''}
           ${catTags}
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
           ${fulfillmentChip(sale.fulfillment)}
           ${preorderBadge}
+          ${recurringBadge}
         </div>
       </div>
       <div class="vendor-details">
@@ -603,6 +681,7 @@ function vendorCard(sale, forceOpen){
         <div class="detail-row"><span class="detail-label">Payment</span>${sale.payment}</div>
         ${recurringBlock}
         ${preorderBlock}
+        ${notesBlock}
         ${contactBlock}
       </div>
     </div>`;
